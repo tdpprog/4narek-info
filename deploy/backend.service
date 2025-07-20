@@ -1,0 +1,12 @@
+[Unit]
+Description=Simple Text Backend
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/go run /root/simple-backend/main.go
+WorkingDirectory=/root/simple-backend
+User=root
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
