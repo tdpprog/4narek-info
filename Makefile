@@ -1,19 +1,19 @@
 .PHONY: install
 install:
-	go build -o backend
+	go build -o simple-backend
 	useradd -r -s /bin/false simple-user || true
-	mkdir -p /opt/backend
-	cp simple-backend /opt/backend/
-	cp deploy/backend.service /etc/systemd/system/
+	mkdir -p /opt/simple-backend
+	cp simple-backend /opt/simple-backend/
+	cp deploy/simple-backend.service /etc/systemd/system/
 	systemctl daemon-reload
-	systemctl enable backend
-	systemctl start backend
+	systemctl enable simple-backend
+	systemctl start simple-backend
 
 .PHONY: uninstall
 uninstall:
-	systemctl stop backend
-	systemctl disable backend
-	rm -rf /opt/backend
-	rm -f /etc/systemd/system/backend.service
+	systemctl stop simple-backend
+	systemctl disable simple-backend
+	rm -rf /opt/simple-backend
+	rm -f /etc/systemd/system/simple-backend.service
 	systemctl daemon-reload
 	userdel simple-user || true
