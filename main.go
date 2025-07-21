@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-telegram/bot"
-	// "github.com/go-telegram/bot/models"
 )
 
 const (
@@ -22,12 +21,16 @@ const (
 )
 
 type Swords struct {
-	Sword5nm  int `json:"sword5nm"`
-	Sword7nm  int `json:"sword7nm"`
-	Sword5    int `json:"sword5"`
-	Sword6    int `json:"sword6"`
-	Sword7    int `json:"sword7"`
-	Megasword int `json:"megasword"`
+	Sword5nm           int `json:"sword5nm"`
+	Sword7nm           int `json:"sword7nm"`
+	Sword5             int `json:"sword5"`
+	Sword6             int `json:"sword6"`
+	Sword7             int `json:"sword7"`
+	Megasword          int `json:"megasword"`
+	NetheriteLeggings  int `json:"netherite_leggings"`
+	NetheriteChestplate int `json:"netherite_chestplate"`
+	NetheriteHelmet    int `json:"netherite_helmet"`
+	NetheriteBoots     int `json:"netherite_boots"`
 }
 
 type DailyData struct {
@@ -55,20 +58,16 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	// Load or initialize data
 	loadData()
 
-	// Create Telegram bot
 	b, err := bot.New(token)
 	if err != nil {
 		log.Fatalf("Error creating bot: %v", err)
 	}
 	tgBot = b
 
-	// Initialize or update Telegram message
 	initTelegramMessage(ctx)
 
-	// Start HTTP server
 	http.HandleFunc("/update", updateHandler)
 	go func() {
 		log.Println("Server started on :8080")
@@ -77,10 +76,8 @@ func main() {
 		}
 	}()
 
-	// Start daily reset checker
 	go dailyResetChecker(ctx)
 
-	// Wait for termination
 	<-ctx.Done()
 }
 
@@ -90,7 +87,6 @@ func loadData() {
 
 	file, err := os.ReadFile(filename)
 	if err != nil {
-		// Initialize new data if file doesn't exist
 		data = DailyData{
 			Date:   today,
 			Swords: Swords{},
@@ -124,7 +120,6 @@ func saveData() {
 
 func initTelegramMessage(ctx context.Context) {
 	if data.MessageID == 0 {
-		// Send new message
 		msg, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
 			Text:   generateMessageText(),
@@ -136,7 +131,6 @@ func initTelegramMessage(ctx context.Context) {
 		data.MessageID = msg.ID
 		saveData()
 	} else {
-		// Update existing message
 		_, err := tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
 			ChatID:    chatID,
 			MessageID: data.MessageID,
@@ -155,7 +149,7 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request struct {
-		Type string `json:"type"`
+		Type string `json:"type"` // Используем поле type вместо id
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -165,8 +159,7 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 	dataMutex.Lock()
 	defer dataMutex.Unlock()
 
-	// Update swords count
-	switch request.Type {
+	switch request.Type { // Обрабатываем поле type
 	case "5nomend":
 		data.Swords.Sword5nm++
 	case "7nomend":
@@ -179,12 +172,19 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 		data.Swords.Sword7++
 	case "megasword":
 		data.Swords.Megasword++
+	case "бошмаки":
+		data.Swords.NetheriteBoots++
+	case "шлем":
+		data.Swords.NetheriteHelmet++
+	case "нагрудник":
+		data.Swords.NetheriteChestplate++
+	case "штаны":
+		data.Swords.NetheriteLeggings++
 	default:
 		http.Error(w, "Invalid sword type", http.StatusBadRequest)
 		return
 	}
 
-	// Save data and update Telegram message
 	saveData()
 	updateTelegramMessage(context.Background())
 
@@ -208,23 +208,25 @@ func generateMessageText() string {
 	return fmt.Sprintf("🗡 Статистика за %s:\n\n"+
 		"5nm: %d\n7nm: %d\n"+
 		"5: %d\n6: %d\n"+
-		"7: %d\nMEGA: %d",
+		"7: %d\nMEGA: %d\n\n"+
+		"Ботинки: %d\nШлем: %d\n"+
+		"Нагрудник: %d\nШтаны: %d",
 		today,
 		data.Swords.Sword5nm, data.Swords.Sword7nm,
 		data.Swords.Sword5, data.Swords.Sword6,
-		data.Swords.Sword7, data.Swords.Megasword)
+		data.Swords.Sword7, data.Swords.Megasword,
+		data.Swords.NetheriteBoots, data.Swords.NetheriteHelmet,
+		data.Swords.NetheriteChestplate, data.Swords.NetheriteLeggings)
 }
 
 func dailyResetChecker(ctx context.Context) {
 	for {
 		now := time.Now().In(loc)
-		// Calculate duration until next midnight
 		nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, loc)
 		duration := nextMidnight.Sub(now)
 
 		select {
 		case <-time.After(duration):
-			// Reset data for new day
 			dataMutex.Lock()
 			data = DailyData{
 				Date:   time.Now().In(loc).Format("2006-01-02"),
@@ -232,7 +234,6 @@ func dailyResetChecker(ctx context.Context) {
 			}
 			dataMutex.Unlock()
 
-			// Send new message for the new day
 			initTelegramMessage(ctx)
 
 		case <-ctx.Done():
