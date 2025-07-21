@@ -21,22 +21,33 @@ const (
 )
 
 type Swords struct {
-	Sword5nm           int `json:"sword5nm"`
-	Sword7nm           int `json:"sword7nm"`
-	Sword5             int `json:"sword5"`
-	Sword6             int `json:"sword6"`
-	Sword7             int `json:"sword7"`
-	Megasword          int `json:"megasword"`
-	NetheriteLeggings  int `json:"netherite_leggings"`
-	NetheriteChestplate int `json:"netherite_chestplate"`
-	NetheriteHelmet    int `json:"netherite_helmet"`
-	NetheriteBoots     int `json:"netherite_boots"`
+	Sword5nmSell            int `json:"sword5nm_sell"`
+	Sword7nmSell            int `json:"sword7nm_sell"`
+	Sword5Sell              int `json:"sword5_sell"`
+	Sword6Sell              int `json:"sword6_sell"`
+	Sword7Sell              int `json:"sword7_sell"`
+	MegaswordSell           int `json:"megasword_sell"`
+	NetheriteLeggingsSell   int `json:"netherite_leggings_sell"`
+	NetheriteChestplateSell int `json:"netherite_chestplate_sell"`
+	NetheriteHelmetSell     int `json:"netherite_helmet_sell"`
+	NetheriteBootsSell      int `json:"netherite_boots_sell"`
+	Sword5nmBuy             int `json:"sword5nm_buy"`
+	Sword7nmBuy             int `json:"sword7nm_buy"`
+	Sword5Buy               int `json:"sword5_buy"`
+	Sword6Buy               int `json:"sword6_buy"`
+	Sword7Buy               int `json:"sword7_buy"`
+	MegaswordBuy            int `json:"megasword_buy"`
+	NetheriteLeggingsBuy    int `json:"netherite_leggings_buy"`
+	NetheriteChestplateBuy  int `json:"netherite_chestplate_buy"`
+	NetheriteHelmetBuy      int `json:"netherite_helmet_buy"`
+	NetheriteBootsBuy       int `json:"netherite_boots_buy"`
 }
 
 type DailyData struct {
 	Date      string `json:"date"`
 	MessageID int    `json:"message_id"`
 	Swords    Swords `json:"swords"`
+	LastText  string `json:"last_text"` // Store last message text to avoid "not modified" errors
 }
 
 var (
@@ -68,7 +79,11 @@ func main() {
 
 	initTelegramMessage(ctx)
 
-	http.HandleFunc("/update", updateHandler)
+	// Set up HTTP handlers
+	http.HandleFunc("/sell", sellHandler)
+	http.HandleFunc("/buy", buyHandler)
+
+	// Start single HTTP server
 	go func() {
 		log.Println("Server started on :8080")
 		if err := http.ListenAndServe(":8080", nil); err != nil {
@@ -120,36 +135,31 @@ func saveData() {
 
 func initTelegramMessage(ctx context.Context) {
 	if data.MessageID == 0 {
+		msgText := generateMessageText()
 		msg, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
-			Text:   generateMessageText(),
+			Text:   msgText,
 		})
 		if err != nil {
 			log.Printf("Error sending message: %v", err)
 			return
 		}
 		data.MessageID = msg.ID
+		data.LastText = msgText
 		saveData()
 	} else {
-		_, err := tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
-			ChatID:    chatID,
-			MessageID: data.MessageID,
-			Text:      generateMessageText(),
-		})
-		if err != nil {
-			log.Printf("Error updating message: %v", err)
-		}
+		updateTelegramMessage(ctx)
 	}
 }
 
-func updateHandler(w http.ResponseWriter, r *http.Request) {
+func sellHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var request struct {
-		Type string `json:"type"` // Используем поле type вместо id
+		Type string `json:"type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -159,27 +169,77 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 	dataMutex.Lock()
 	defer dataMutex.Unlock()
 
-	switch request.Type { // Обрабатываем поле type
+	switch request.Type {
 	case "5nomend":
-		data.Swords.Sword5nm++
+		data.Swords.Sword5nmSell++
 	case "7nomend":
-		data.Swords.Sword7nm++
+		data.Swords.Sword7nmSell++
 	case "sword5":
-		data.Swords.Sword5++
+		data.Swords.Sword5Sell++
 	case "sword6":
-		data.Swords.Sword6++
+		data.Swords.Sword6Sell++
 	case "sword7":
-		data.Swords.Sword7++
+		data.Swords.Sword7Sell++
 	case "megasword":
-		data.Swords.Megasword++
+		data.Swords.MegaswordSell++
 	case "бошмаки":
-		data.Swords.NetheriteBoots++
+		data.Swords.NetheriteBootsSell++
 	case "шлем":
-		data.Swords.NetheriteHelmet++
+		data.Swords.NetheriteHelmetSell++
 	case "нагрудник":
-		data.Swords.NetheriteChestplate++
+		data.Swords.NetheriteChestplateSell++
 	case "штаны":
-		data.Swords.NetheriteLeggings++
+		data.Swords.NetheriteLeggingsSell++
+	default:
+		http.Error(w, "Invalid sword type", http.StatusBadRequest)
+		return
+	}
+
+	saveData()
+	updateTelegramMessage(context.Background())
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(data.Swords)
+}
+
+func buyHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var request struct {
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	dataMutex.Lock()
+	defer dataMutex.Unlock()
+
+	switch request.Type {
+	case "5nomend":
+		data.Swords.Sword5nmBuy++
+	case "7nomend":
+		data.Swords.Sword7nmBuy++
+	case "sword5":
+		data.Swords.Sword5Buy++
+	case "sword6":
+		data.Swords.Sword6Buy++
+	case "sword7":
+		data.Swords.Sword7Buy++
+	case "megasword":
+		data.Swords.MegaswordBuy++
+	case "бошмаки":
+		data.Swords.NetheriteBootsBuy++
+	case "шлем":
+		data.Swords.NetheriteHelmetBuy++
+	case "нагрудник":
+		data.Swords.NetheriteChestplateBuy++
+	case "штаны":
+		data.Swords.NetheriteLeggingsBuy++
 	default:
 		http.Error(w, "Invalid sword type", http.StatusBadRequest)
 		return
@@ -193,30 +253,44 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateTelegramMessage(ctx context.Context) {
+	newText := generateMessageText()
+	if newText == data.LastText {
+		return // Skip update if text hasn't changed
+	}
+
 	_, err := tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
 		ChatID:    chatID,
 		MessageID: data.MessageID,
-		Text:      generateMessageText(),
+		Text:      newText,
 	})
 	if err != nil {
 		log.Printf("Error updating Telegram message: %v", err)
+		return
 	}
+
+	data.LastText = newText
+	saveData()
 }
 
 func generateMessageText() string {
 	today := time.Now().In(loc).Format("2006-01-02")
 	return fmt.Sprintf("🗡 Статистика за %s:\n\n"+
-		"5nm: %d\n7nm: %d\n"+
-		"5: %d\n6: %d\n"+
-		"7: %d\nMEGA: %d\n\n"+
-		"Ботинки: %d\nШлем: %d\n"+
-		"Нагрудник: %d\nШтаны: %d",
+		"5nm: %d/%d\n7nm: %d/%d\n"+
+		"5: %d/%d\n6: %d/%d\n"+
+		"7: %d/%d\nMEGA: %d/%d\n\n"+
+		"Ботинки: %d/%d\nШлем: %d/%d\n"+
+		"Нагрудник: %d/%d\nШтаны: %d/%d",
 		today,
-		data.Swords.Sword5nm, data.Swords.Sword7nm,
-		data.Swords.Sword5, data.Swords.Sword6,
-		data.Swords.Sword7, data.Swords.Megasword,
-		data.Swords.NetheriteBoots, data.Swords.NetheriteHelmet,
-		data.Swords.NetheriteChestplate, data.Swords.NetheriteLeggings)
+		data.Swords.Sword5nmBuy, data.Swords.Sword5nmSell, 
+		data.Swords.Sword7nmBuy, data.Swords.Sword7nmSell,
+		data.Swords.Sword5Buy, data.Swords.Sword5Sell, 
+		data.Swords.Sword6Buy, data.Swords.Sword6Sell,
+		data.Swords.Sword7Buy, data.Swords.Sword7Sell, 
+		data.Swords.MegaswordBuy, data.Swords.MegaswordSell,
+		data.Swords.NetheriteBootsBuy, data.Swords.NetheriteBootsSell, 
+		data.Swords.NetheriteHelmetBuy, data.Swords.NetheriteHelmetSell,
+		data.Swords.NetheriteChestplateBuy, data.Swords.NetheriteChestplateSell, 
+		data.Swords.NetheriteLeggingsBuy, data.Swords.NetheriteLeggingsSell)
 }
 
 func dailyResetChecker(ctx context.Context) {
