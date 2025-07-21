@@ -275,7 +275,7 @@ func updateTelegramMessage(ctx context.Context) {
 func generateMessageText() string {
 	today := time.Now().In(loc).Format("2006-01-02")
 	return fmt.Sprintf("🗡 Статистика за %s:\n\n"+
-		"5nm: %d/%d\n5: %d/%d\n"+
+		"5nm: %d/%d\n5: %d/%d \n"+
 		"6: %d/%d\n+7nm: %d/%d\n"+
 		"7: %d/%d\nMEGA: %d/%d\n\n"+
 		"Ботинки: %d/%d\nШлем: %d/%d\n"+
