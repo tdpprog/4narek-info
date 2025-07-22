@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"sync"
 	"time"
 
@@ -44,10 +45,12 @@ type Swords struct {
 }
 
 type DailyData struct {
-	Date      string `json:"date"`
-	MessageID int    `json:"message_id"`
-	Swords    Swords `json:"swords"`
-	LastText  string `json:"last_text"` // Store last message text to avoid "not modified" errors
+	Date      string          `json:"date"`
+	MessageID int             `json:"message_id"`
+	Swords    Swords          `json:"swords"`
+	BuyMap    map[string]int  `json:"buy_map"`
+	SellMap   map[string]int  `json:"sell_map"`
+	LastText  string          `json:"last_text"`
 }
 
 var (
@@ -66,7 +69,6 @@ func init() {
 }
 
 func main() {
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
@@ -80,11 +82,11 @@ func main() {
 
 	initTelegramMessage(ctx)
 
-	// Set up HTTP handlers
 	http.HandleFunc("/sell", sellHandler)
 	http.HandleFunc("/buy", buyHandler)
+	http.HandleFunc("/buy_shue", buyShueHandler)
+	http.HandleFunc("/sell_shue", SellShueHandler)
 
-	// Start single HTTP server
 	go func() {
 		log.Println("Server started on :8080")
 		if err := http.ListenAndServe(":8080", nil); err != nil {
@@ -104,8 +106,10 @@ func loadData() {
 	file, err := os.ReadFile(filename)
 	if err != nil {
 		data = DailyData{
-			Date:   today,
-			Swords: Swords{},
+			Date:    today,
+			Swords:  Swords{},
+			BuyMap:  make(map[string]int), // Явная инициализация карты
+			SellMap: make(map[string]int), // Явная инициализация карты
 		}
 		return
 	}
@@ -113,9 +117,19 @@ func loadData() {
 	if err := json.Unmarshal(file, &data); err != nil {
 		log.Printf("Error decoding data file: %v", err)
 		data = DailyData{
-			Date:   today,
-			Swords: Swords{},
+			Date:    today,
+			Swords:  Swords{},
+			BuyMap:  make(map[string]int), // Явная инициализация карты
+			SellMap: make(map[string]int), // Явная инициализация карты
 		}
+	}
+
+	// Дополнительная проверка на nil мапы после загрузки
+	if data.BuyMap == nil {
+		data.BuyMap = make(map[string]int)
+	}
+	if data.SellMap == nil {
+		data.SellMap = make(map[string]int)
 	}
 }
 
@@ -253,10 +267,72 @@ func buyHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(data.Swords)
 }
 
+func buyShueHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var request struct {
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	dataMutex.Lock()
+	defer dataMutex.Unlock()
+
+	// Проверка инициализации карты перед использованием
+	if data.BuyMap == nil {
+		data.BuyMap = make(map[string]int)
+	}
+
+	data.BuyMap[request.Type]++
+
+	saveData()
+	updateTelegramMessage(context.Background())
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(data.BuyMap)
+}
+
+func SellShueHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var request struct {
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	dataMutex.Lock()
+	defer dataMutex.Unlock()
+
+	// Проверка инициализации карты перед использованием
+	if data.SellMap == nil {
+		data.SellMap = make(map[string]int)
+	}
+
+	data.SellMap[request.Type]++
+
+	saveData()
+	updateTelegramMessage(context.Background())
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(data.SellMap)
+}
+
 func updateTelegramMessage(ctx context.Context) {
 	newText := generateMessageText()
 	if newText == data.LastText {
-		return // Skip update if text hasn't changed
+		return
 	}
 
 	_, err := tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
@@ -275,7 +351,9 @@ func updateTelegramMessage(ctx context.Context) {
 
 func generateMessageText() string {
 	today := time.Now().In(loc).Format("2006-01-02")
-	return fmt.Sprintf("🗡 Статистика за %s:\n\n"+
+	currentTime := time.Now().In(loc).Format("15:04")
+	
+	msg := fmt.Sprintf("🗡 Статистика за %s:\n\n"+
 		"5nm:  %d/%d\n5:    %d/%d\n"+
 		"6:    %d/%d\n7nm:  %d/%d\n"+
 		"7:    %d/%d\nMEGA: %d/%d\n"+
@@ -292,6 +370,37 @@ func generateMessageText() string {
 		data.Swords.NetheriteHelmetBuy, data.Swords.NetheriteHelmetSell,
 		data.Swords.NetheriteChestplateBuy, data.Swords.NetheriteChestplateSell, 
 		data.Swords.NetheriteLeggingsBuy, data.Swords.NetheriteLeggingsSell)
+
+	// Обработка данных из мап
+	if len(data.BuyMap) > 0 || len(data.SellMap) > 0 {
+		msg += "\nДополнительные предметы:\n"
+		
+		// Собираем все уникальные ключи из обеих мап
+		allKeys := make([]string, 0)
+		for k := range data.BuyMap {
+			allKeys = append(allKeys, k)
+		}
+		for k := range data.SellMap {
+			if _, exists := data.BuyMap[k]; !exists {
+				allKeys = append(allKeys, k)
+			}
+		}
+		
+		// Сортируем ключи по алфавиту
+		sort.Strings(allKeys)
+		
+		// Выводим каждый предмет в формате "название: покупки/продажи"
+		for _, item := range allKeys {
+			buyCount := data.BuyMap[item]
+			sellCount := data.SellMap[item]
+			msg += fmt.Sprintf("%s: %d/%d\n", item, buyCount, sellCount)
+		}
+	}
+
+	// Добавляем время в конце
+	msg += fmt.Sprintf("\n%s", currentTime)
+
+	return msg
 }
 
 func dailyResetChecker(ctx context.Context) {
@@ -304,8 +413,10 @@ func dailyResetChecker(ctx context.Context) {
 		case <-time.After(duration):
 			dataMutex.Lock()
 			data = DailyData{
-				Date:   time.Now().In(loc).Format("2006-01-02"),
-				Swords: Swords{},
+				Date:    time.Now().In(loc).Format("2006-01-02"),
+				Swords:  Swords{},
+				BuyMap:  make(map[string]int),
+				SellMap: make(map[string]int),
 			}
 			dataMutex.Unlock()
 

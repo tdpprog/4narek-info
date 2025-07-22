@@ -7,7 +7,7 @@
     "sword5_sell": 0,
     "sword6_sell": 0,
     "sword7_sell": 0,
-    "megasword_sell": 0,
+    "megasword_sell": 4,
     "netherite_leggings_sell": 0,
     "netherite_chestplate_sell": 0,
     "netherite_helmet_sell": 0,
@@ -17,11 +17,21 @@
     "sword5_buy": 0,
     "sword6_buy": 0,
     "sword7_buy": 0,
-    "megasword_buy": 0,
+    "megasword_buy": 1,
     "netherite_leggings_buy": 0,
     "netherite_chestplate_buy": 0,
     "netherite_helmet_buy": 0,
     "netherite_boots_buy": 0
   },
-  "last_text": "🗡 Статистика за 2025-07-22:\n\n5nm:  0/0\n5:    0/0\n6:    0/0\n7nm:  0/0\n7:    0/0\nMEGA: 0/0\nБотинки:   0/0\nШлем:     0/0\nНагрудник: 0/0\nШтаны:    0/0"
+  "buy_map": {
+    "megasword": 4,
+    "megasword123132": 4,
+    "megasword1231322": 23
+  },
+  "sell_map": {
+    "megasword": 3,
+    "megasword123132": 18,
+    "megasword123132213123": 3
+  },
+  "last_text": "🗡 Статистика за 2025-07-22:\n\n5nm:  0/0\n5:    0/0\n6:    0/0\n7nm:  0/0\n7:    0/0\nMEGA: 1/4\nБотинки:   0/0\nШлем:      0/0\nНагрудник: 0/0\nШтаны:     0/0\n\nДополнительные предметы:\nmegasword: 4/3\nmegasword123132: 4/18\nmegasword1231322: 23/0\nmegasword123132213123: 0/3\n\n16:43"
 }
